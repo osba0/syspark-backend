@@ -11,7 +11,8 @@ class ConfigEntreprise extends Model
     protected $fillable = [
         'nom', 'ninea', 'rc', 'adresse',
         'telephone', 'email', 'site_web',
-        'logo', 'couleur_1', 'couleur_2', 'couleur_3',
+        'logo', 'logo_app',
+        'couleur_1', 'couleur_2', 'couleur_3',
         'notes',
     ];
 
@@ -26,10 +27,17 @@ class ConfigEntreprise extends Model
         ]);
     }
 
-    /** URL absolue du logo */
+    /** URL du logo entreprise (Topbar, PDF) */
     public function getLogoUrlAttribute(): ?string
     {
         if (! $this->logo) return null;
         return url('storage/' . $this->logo);
+    }
+
+    /** URL du logo application (Sidebar) */
+    public function getLogoAppUrlAttribute(): ?string
+    {
+        if (! $this->logo_app) return null;
+        return url('storage/' . $this->logo_app);
     }
 }

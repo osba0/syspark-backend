@@ -217,18 +217,19 @@ class AdminController extends BaseApiController
     {
         $config = ConfigEntreprise::instance();
         return $this->success([
-            'nom'        => $config->nom,
-            'ninea'      => $config->ninea,
-            'rc'         => $config->rc,
-            'adresse'    => $config->adresse,
-            'telephone'  => $config->telephone,
-            'email'      => $config->email,
-            'site_web'   => $config->site_web,
-            'logo_url'   => $config->logo_url,
-            'couleur_1'  => $config->couleur_1,
-            'couleur_2'  => $config->couleur_2,
-            'couleur_3'  => $config->couleur_3,
-            'notes'      => $config->notes,
+            'nom'         => $config->nom,
+            'ninea'       => $config->ninea,
+            'rc'          => $config->rc,
+            'adresse'     => $config->adresse,
+            'telephone'   => $config->telephone,
+            'email'       => $config->email,
+            'site_web'    => $config->site_web,
+            'logo_url'    => $config->logo_url,
+            'logo_app_url'=> $config->logo_app_url,
+            'couleur_1'   => $config->couleur_1,
+            'couleur_2'   => $config->couleur_2,
+            'couleur_3'   => $config->couleur_3,
+            'notes'       => $config->notes,
         ]);
     }
 
@@ -251,27 +252,46 @@ class AdminController extends BaseApiController
             'couleur_3' => ['nullable', 'string', 'max:20'],
             'notes'     => ['nullable', 'string'],
             'logo'      => ['nullable', 'file', 'mimes:jpg,jpeg,png,svg,webp', 'max:2048'],
+            'logo_app'  => ['nullable', 'file', 'mimes:jpg,jpeg,png,svg,webp', 'max:2048'],
         ]);
 
         $config = ConfigEntreprise::instance();
-        $data   = $request->except('logo');
+        // Exclure les fichiers uploadés — ils sont traités séparément
+        $data   = $request->except(['logo', 'logo_app']);
 
-        // Upload logo
+        // Upload logo entreprise (Topbar, PDF)
         if ($request->hasFile('logo')) {
-            // Supprimer l'ancien
             if ($config->logo) {
                 Storage::disk('public')->delete($config->logo);
             }
-            $path        = $request->file('logo')->store('entreprise', 'public');
-            $data['logo']= $path;
+            $data['logo'] = $request->file('logo')->store('entreprise', 'public');
+        }
+
+        // Upload logo application (Sidebar)
+        if ($request->hasFile('logo_app')) {
+            if ($config->logo_app) {
+                Storage::disk('public')->delete($config->logo_app);
+            }
+            $data['logo_app'] = $request->file('logo_app')->store('entreprise', 'public');
         }
 
         $config->update($data);
+        $config = $config->fresh(); // Recharger pour avoir les bons accesseurs
 
         return $this->success([
-            'nom'      => $config->nom,
-            'logo_url' => $config->logo_url,
-            ...$data,
+            'nom'          => $config->nom,
+            'ninea'        => $config->ninea,
+            'rc'           => $config->rc,
+            'adresse'      => $config->adresse,
+            'telephone'    => $config->telephone,
+            'email'        => $config->email,
+            'site_web'     => $config->site_web,
+            'logo_url'     => $config->logo_url,
+            'logo_app_url' => $config->logo_app_url,
+            'couleur_1'    => $config->couleur_1,
+            'couleur_2'    => $config->couleur_2,
+            'couleur_3'    => $config->couleur_3,
+            'notes'        => $config->notes,
         ], 'Configuration mise à jour.');
     }
 

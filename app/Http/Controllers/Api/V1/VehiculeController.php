@@ -287,4 +287,118 @@ class VehiculeController extends BaseApiController
 
         return $this->success($alertes);
     }
+    // ============================================================
+    // Photos véhicule (Spatie Media Library)
+    // ============================================================
+
+    /**
+     * GET /api/v1/vehicules/{vehicule}/photos
+     */
+    public function photos(Vehicule $vehicule): JsonResponse
+    {
+        $this->authorize('view', $vehicule);
+
+        $photos = $vehicule->getMedia('photos')->map(fn ($m) => [
+            'id'          => $m->id,
+            'url'         => $m->getUrl(),
+            'thumb_url'   => $m->getUrl('thumb'),
+            'nom'         => $m->file_name,
+            'taille'      => $m->human_readable_size,
+            'principale'  => (bool) ($m->custom_properties['principale'] ?? false),
+            'created_at'  => $m->created_at->format('Y-m-d H:i'),
+        ]);
+
+        return $this->success($photos);
+    }
+
+    /**
+     * POST /api/v1/vehicules/{vehicule}/photos
+     */
+    public function uploadPhoto(Request $request, Vehicule $vehicule): JsonResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $request->validate([
+            'photos'   => ['required', 'array', 'max:10'],
+            'photos.*' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+        ]);
+
+        $uploaded = [];
+        foreach ($request->file('photos') as $file) {
+            $media = $vehicule
+                ->addMedia($file)
+                ->withCustomProperties(['principale' => false])
+                ->toMediaCollection('photos');
+
+            // Si c'est la première photo, elle devient principale
+            if ($vehicule->getMedia('photos')->count() === 1) {
+                $media->setCustomProperty('principale', true);
+                $media->save();
+            }
+
+            $uploaded[] = [
+                'id'         => $media->id,
+                'url'        => $media->getUrl(),
+                'thumb_url'  => $media->getUrl('thumb'),
+                'nom'        => $media->file_name,
+                'taille'     => $media->human_readable_size,
+                'principale' => (bool) ($media->custom_properties['principale'] ?? false),
+                'created_at' => $media->created_at->format('Y-m-d H:i'),
+            ];
+        }
+
+        return $this->success($uploaded, count($uploaded) . ' photo(s) ajoutée(s).');
+    }
+
+    /**
+     * DELETE /api/v1/vehicules/{vehicule}/photos/{mediaId}
+     */
+    public function deletePhoto(Vehicule $vehicule, int $mediaId): JsonResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        $media = $vehicule->getMedia('photos')->find($mediaId);
+
+        if (!$media) {
+            return $this->error('Photo non trouvée.', 404);
+        }
+
+        $estPrincipale = $media->custom_properties['principale'] ?? false;
+        $media->delete();
+
+        // Si c'était la principale, assigner la suivante
+        if ($estPrincipale) {
+            $suivante = $vehicule->getMedia('photos')->first();
+            if ($suivante) {
+                $suivante->setCustomProperty('principale', true);
+                $suivante->save();
+            }
+        }
+
+        return $this->success(null, 'Photo supprimée.');
+    }
+
+    /**
+     * PUT /api/v1/vehicules/{vehicule}/photos/{mediaId}/principale
+     */
+    public function setPhotoPrincipale(Vehicule $vehicule, int $mediaId): JsonResponse
+    {
+        $this->authorize('update', $vehicule);
+
+        // Retirer le flag principale de toutes
+        foreach ($vehicule->getMedia('photos') as $m) {
+            $m->setCustomProperty('principale', false);
+            $m->save();
+        }
+
+        $media = $vehicule->getMedia('photos')->find($mediaId);
+        if (!$media) {
+            return $this->error('Photo non trouvée.', 404);
+        }
+
+        $media->setCustomProperty('principale', true);
+        $media->save();
+
+        return $this->success(['id' => $mediaId], 'Photo principale définie.');
+    }
 }

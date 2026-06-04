@@ -15,7 +15,6 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 class Vehicule extends Model implements HasMedia
 {
     use SoftDeletes, LogsActivity, InteractsWithMedia;
-    
 
     protected $fillable = [
         'agence_id',
@@ -74,6 +73,15 @@ class Vehicule extends Model implements HasMedia
 
         $this->addMediaCollection('documents')
             ->acceptsMimeTypes(['application/pdf', 'image/jpeg', 'image/png']);
+    }
+
+    public function registerMediaConversions(\Spatie\MediaLibrary\MediaCollections\Models\Media $media = null): void
+    {
+        $this->addMediaConversion('thumb')
+            ->width(400)
+            ->height(300)
+            ->sharpen(5)
+            ->performOnCollections('photos');
     }
 
     // ============================================================

@@ -92,6 +92,11 @@ Route::prefix('v1')->name('v1.')->group(function () {
             Route::get('{vehicule}/signalements',  [VehiculeController::class, 'signalements'])->name('signalements');
             Route::get('{vehicule}/affectations',  [VehiculeController::class, 'affectations'])->name('affectations');
             Route::get('{vehicule}/alertes',       [VehiculeController::class, 'alertes'])->name('alertes');
+            // Photos
+            Route::get('{vehicule}/photos',        [VehiculeController::class, 'photos'])->name('photos');
+            Route::post('{vehicule}/photos',       [VehiculeController::class, 'uploadPhoto'])->name('photos.upload');
+            Route::delete('{vehicule}/photos/{mediaId}', [VehiculeController::class, 'deletePhoto'])->name('photos.delete');
+            Route::put('{vehicule}/photos/{mediaId}/principale', [VehiculeController::class, 'setPhotoPrincipale'])->name('photos.principale');
         });
 
         // --- Chauffeurs ---

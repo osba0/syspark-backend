@@ -33,11 +33,12 @@ class MaintenanceResource extends JsonResource
 
             'vehicule_id'         => $this->vehicule_id,
             'vehicule'            => $this->whenLoaded('vehicule', fn () => [
-                'id'             => $this->vehicule->id,
-                'immatriculation'=> $this->vehicule->immatriculation,
-                'marque'         => $this->vehicule->marque,
-                'modele'         => $this->vehicule->modele,
-                'agence'         => $this->vehicule->agence?->nom,
+                'id'                 => $this->vehicule->id,
+                'immatriculation'    => $this->vehicule->immatriculation,
+                'marque'             => $this->vehicule->marque,
+                'modele'             => $this->vehicule->modele,
+                'agence'             => $this->vehicule->agence?->nom,
+                'kilometrage_actuel' => $this->vehicule->kilometrage_actuel,
             ]),
 
             'fournisseur_id'      => $this->fournisseur_id,

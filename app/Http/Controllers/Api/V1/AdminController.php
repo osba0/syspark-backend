@@ -169,11 +169,12 @@ class AdminController extends BaseApiController
     // ============================================================
 
     private const ALLOWED_COMMANDS = [
-        'parc:scan-alertes'    => 'Scan des alertes automatiques',
-        'parc:update-documents'=> 'Mise à jour des statuts de documents',
-        'parc:stats'           => 'Recalcul des statistiques',
-        'permission:cache-reset'=> 'Vider le cache des permissions',
-        'cache:clear'          => 'Vider le cache application',
+        'parc:scan-alertes'             => 'Scan des alertes automatiques',
+        'parc:update-documents'         => 'Mise à jour des statuts de documents',
+        'parc:stats'                    => 'Recalcul des statistiques',
+        'media-library:regenerate'      => 'Régénérer les miniatures des photos',
+        'permission:cache-reset'        => 'Vider le cache des permissions',
+        'cache:clear'                   => 'Vider le cache application',
     ];
 
     public function runCommand(Request $request): JsonResponse

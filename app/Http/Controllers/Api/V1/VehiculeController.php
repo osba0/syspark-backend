@@ -301,7 +301,9 @@ class VehiculeController extends BaseApiController
         $photos = $vehicule->getMedia('photos')->map(fn ($m) => [
             'id'          => $m->id,
             'url'         => $m->getUrl(),
-            'thumb_url'   => $m->getUrl('thumb'),
+            'thumb_url'   => file_exists($m->getPath('thumb'))
+                                ? $m->getUrl('thumb')
+                                : $m->getUrl(),
             'nom'         => $m->file_name,
             'taille'      => $m->human_readable_size,
             'principale'  => (bool) ($m->custom_properties['principale'] ?? false),

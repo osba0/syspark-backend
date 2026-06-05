@@ -84,6 +84,24 @@ class Vehicule extends Model implements HasMedia
             ->performOnCollections('photos');
     }
 
+    /** URL de la photo principale du véhicule (pour les listes) */
+    public function getPhotoPrincipaleUrlAttribute(): ?string
+    {
+        $principale = $this->getMedia('photos')
+            ->first(fn ($m) => $m->custom_properties['principale'] ?? false)
+            ?? $this->getMedia('photos')->first();
+
+        if (! $principale) return null;
+
+        // Utiliser le thumb s'il existe physiquement, sinon l'original
+        $thumbPath = $principale->getPath('thumb');
+        if (file_exists($thumbPath)) {
+            return $principale->getUrl('thumb');
+        }
+
+        return $principale->getUrl();
+    }
+
     // ============================================================
     // Relations
     // ============================================================

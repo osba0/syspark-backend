@@ -103,6 +103,12 @@ class ChauffeurController extends BaseApiController
                 $chauffeur->update(['photo' => $path]);
             }
 
+            if ($request->hasFile('photo_profil')) {
+                $path = $request->file('photo_profil')
+                    ->store("chauffeurs/{$chauffeur->id}/profil", 'public');
+                $chauffeur->update(['photo_profil' => $path]);
+            }
+
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
@@ -193,6 +199,15 @@ class ChauffeurController extends BaseApiController
                 }
                 $path = $this->uploadPhotoPermis($request->file('photo_permis'), $chauffeur->id);
                 $chauffeur->update(['photo' => $path]);
+            }
+
+            if ($request->hasFile('photo_profil')) {
+                if ($chauffeur->photo_profil) {
+                    Storage::disk('public')->delete($chauffeur->photo_profil);
+                }
+                $path = $request->file('photo_profil')
+                    ->store("chauffeurs/{$chauffeur->id}/profil", 'public');
+                $chauffeur->update(['photo_profil' => $path]);
             }
 
             DB::commit();
@@ -319,5 +334,48 @@ class ChauffeurController extends BaseApiController
         }
 
         return $path;
+    }
+
+    // ============================================================
+    // Photo de profil
+    // ============================================================
+
+    /**
+     * POST /api/v1/chauffeurs/{chauffeur}/photo
+     */
+    public function uploadPhoto(Request $request, Chauffeur $chauffeur): JsonResponse
+    {
+        $this->authorize('update', $chauffeur);
+
+        $request->validate([
+            'photo' => ['required', 'file', 'mimes:jpg,jpeg,png,webp', 'max:3072'],
+        ]);
+
+        // Supprimer l'ancienne
+        if ($chauffeur->photo_profil) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($chauffeur->photo_profil);
+        }
+
+        $path = $request->file('photo')->store("chauffeurs/{$chauffeur->id}/profil", 'public');
+        $chauffeur->update(['photo_profil' => $path]);
+
+        return $this->success([
+            'photo_profil_url' => $chauffeur->fresh()->photo_profil_url,
+        ], 'Photo mise à jour.');
+    }
+
+    /**
+     * DELETE /api/v1/chauffeurs/{chauffeur}/photo
+     */
+    public function deletePhoto(Chauffeur $chauffeur): JsonResponse
+    {
+        $this->authorize('update', $chauffeur);
+
+        if ($chauffeur->photo_profil) {
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($chauffeur->photo_profil);
+            $chauffeur->update(['photo_profil' => null]);
+        }
+
+        return $this->success(null, 'Photo supprimée.');
     }
 }

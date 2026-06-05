@@ -111,6 +111,8 @@ Route::prefix('v1')->name('v1.')->group(function () {
             Route::delete('{chauffeur}',               [ChauffeurController::class, 'destroy'])->name('destroy');
             Route::get('{chauffeur}/vehicule-actuel',  [ChauffeurController::class, 'vehiculeActuel'])->name('vehicule');
             Route::get('{chauffeur}/historique',       [ChauffeurController::class, 'historique'])->name('historique');
+            Route::post('{chauffeur}/photo',           [ChauffeurController::class, 'uploadPhoto'])->name('photo');
+            Route::delete('{chauffeur}/photo',         [ChauffeurController::class, 'deletePhoto'])->name('photo.delete');
         });
 
         // --- Affectations ---

@@ -24,6 +24,7 @@ class VehiculeResource extends JsonResource
 
             // Statut
             'statut'                => $this->statut,
+            'photo_principale_url'  => $this->photo_principale_url,
 
             // Kilométrage
             'kilometrage_actuel'        => $this->kilometrage_actuel,

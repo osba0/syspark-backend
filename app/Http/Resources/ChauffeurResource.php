@@ -44,6 +44,7 @@ class ChauffeurResource extends JsonResource
             'photo'                  => $this->photo
                 ? Storage::disk(config('parc.uploads.disque', 'public'))->url($this->photo)
                 : null,
+            'photo_profil_url'       => $this->photo_profil_url,
 
             // Agence
             'agence_id'              => $this->agence_id,

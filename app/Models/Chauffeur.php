@@ -32,6 +32,7 @@ class Chauffeur extends Model
         'matricule_interne',
         'statut',
         'photo',
+        'photo_profil',
         'notes',
     ];
 
@@ -100,6 +101,13 @@ class Chauffeur extends Model
     // ============================================================
     // Accesseurs
     // ============================================================
+
+    /** URL de la photo de profil du chauffeur */
+    public function getPhotoProfilUrlAttribute(): ?string
+    {
+        if (! $this->photo_profil) return null;
+        return url('storage/' . $this->photo_profil);
+    }
 
     public function getNomCompletAttribute(): string
     {

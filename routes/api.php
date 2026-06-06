@@ -220,6 +220,7 @@ Route::prefix('v1')->name('v1.')->group(function () {
             Route::get('maintenance',  [RapportController::class, 'maintenance'])->name('maintenance');
             Route::get('carburant',    [RapportController::class, 'carburant'])->name('carburant');
             Route::get('tco',          [RapportController::class, 'tco'])->name('tco');
+            Route::get('axes',         [RapportController::class, 'axes'])->name('axes');
             Route::get('parc-global',  [RapportController::class, 'parcGlobal'])->name('parc');
 
             Route::prefix('pdf')->name('pdf.')->group(function () {

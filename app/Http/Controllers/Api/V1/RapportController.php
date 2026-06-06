@@ -131,7 +131,131 @@ class RapportController extends BaseApiController
             return $this->success($this->tcoService->calculer($vehicule, $annee));
         }
 
-        return $this->success($this->tcoService->consolideParcParAgence($agenceId ?? 0, $annee));
+        return $this->success($this->tcoService->consolideParcParAgence((int)($agenceId ?? 0), (int)$annee));
+    }
+
+    /**
+
+    /**
+     * GET /api/v1/rapports/axes
+     * Rapport coût par axe de livraison — maintenance + carburant
+     */
+    public function axes(Request $request): JsonResponse
+    {
+        $request->validate([
+            'annee'     => ['nullable', 'integer'],
+            'agence_id' => ['nullable', 'exists:agences,id'],
+        ]);
+
+        $annee    = $request->input('annee', date('Y'));
+        $agenceId = $request->input('agence_id') ?? $this->getAgenceScopeId($request);
+
+        // ── Maintenance par axe ────────────────────────────────
+        $maintenanceParAxe = DB::table('maintenances')
+            ->join('axes_livraison', 'maintenances.axe_livraison_id', '=', 'axes_livraison.id')
+            ->whereYear('maintenances.date_travaux', $annee)
+            ->where('maintenances.statut', 'termine')
+            ->whereNotNull('maintenances.axe_livraison_id')
+            ->when($agenceId, fn ($q) => $q->where('maintenances.agence_id', $agenceId))
+            ->selectRaw('
+                axes_livraison.id,
+                axes_livraison.nom,
+                axes_livraison.code,
+                axes_livraison.zone,
+                COUNT(*) as nb_maintenances,
+                SUM(maintenances.montant_ttc) as cout_maintenance,
+                SUM(CASE WHEN maintenances.type_operation = "entretien" THEN maintenances.montant_ttc ELSE 0 END) as entretien,
+                SUM(CASE WHEN maintenances.type_operation = "reparation" THEN maintenances.montant_ttc ELSE 0 END) as reparation,
+                SUM(CASE WHEN maintenances.type_operation = "pneu" THEN maintenances.montant_ttc ELSE 0 END) as pneu
+            ')
+            ->groupBy('axes_livraison.id', 'axes_livraison.nom', 'axes_livraison.code', 'axes_livraison.zone')
+            ->orderByDesc('cout_maintenance')
+            ->get()
+            ->keyBy('id');
+
+        // ── Carburant par axe ──────────────────────────────────
+        $carburantParAxe = DB::table('carburants')
+            ->join('axes_livraison', 'carburants.axe_livraison_id', '=', 'axes_livraison.id')
+            ->whereYear('carburants.date', $annee)
+            ->whereNotNull('carburants.axe_livraison_id')
+            ->when($agenceId, fn ($q) => $q->where('carburants.agence_id', $agenceId))
+            ->selectRaw('
+                axes_livraison.id,
+                COUNT(*) as nb_pleins,
+                SUM(carburants.litres) as litres_total,
+                SUM(carburants.montant) as cout_carburant
+            ')
+            ->groupBy('axes_livraison.id')
+            ->get()
+            ->keyBy('id');
+
+        // ── Affectations par axe ───────────────────────────────
+        $affectationsParAxe = DB::table('affectations')
+            ->join('axes_livraison', 'affectations.axe_livraison_id', '=', 'axes_livraison.id')
+            ->whereYear('affectations.date_debut', $annee)
+            ->whereNotNull('affectations.axe_livraison_id')
+            ->when($agenceId, fn ($q) => $q->where('affectations.agence_id', $agenceId))
+            ->selectRaw('axes_livraison.id, COUNT(*) as nb_affectations')
+            ->groupBy('axes_livraison.id')
+            ->get()
+            ->keyBy('id');
+
+        // ── Liste de tous les axes concernés ───────────────────
+        $axeIds = $maintenanceParAxe->keys()
+            ->merge($carburantParAxe->keys())
+            ->merge($affectationsParAxe->keys())
+            ->unique();
+
+        $axes = \App\Models\AxeLivraison::whereIn('id', $axeIds)
+            ->with('agence:id,nom,code')
+            ->get()
+            ->keyBy('id');
+
+        // ── Fusionner les données ──────────────────────────────
+        $data = $axeIds->map(function ($id) use ($maintenanceParAxe, $carburantParAxe, $affectationsParAxe, $axes) {
+            $m    = $maintenanceParAxe->get($id);
+            $c    = $carburantParAxe->get($id);
+            $a    = $affectationsParAxe->get($id);
+            $axe  = $axes->get($id);
+
+            $coutMaint   = (float) ($m->cout_maintenance ?? 0);
+            $coutCarb    = (float) ($c->cout_carburant   ?? 0);
+            $coutTotal   = $coutMaint + $coutCarb;
+
+            return [
+                'axe_id'          => $id,
+                'axe_nom'         => $axe?->nom       ?? 'Axe #' . $id,
+                'axe_code'        => $axe?->code       ?? '',
+                'axe_zone'        => $axe?->zone       ?? null,
+                'agence'          => $axe?->agence?->nom ?? null,
+                'nb_affectations' => (int) ($a->nb_affectations ?? 0),
+                'nb_maintenances' => (int) ($m->nb_maintenances ?? 0),
+                'cout_maintenance'=> $coutMaint,
+                'cout_entretien'  => (float) ($m->entretien ?? 0),
+                'cout_reparation' => (float) ($m->reparation ?? 0),
+                'cout_pneu'       => (float) ($m->pneu ?? 0),
+                'nb_pleins'       => (int) ($c->nb_pleins ?? 0),
+                'litres_total'    => (float) ($c->litres_total ?? 0),
+                'cout_carburant'  => $coutCarb,
+                'cout_total'      => $coutTotal,
+            ];
+        })->sortByDesc('cout_total')->values();
+
+        // ── Totaux globaux ─────────────────────────────────────
+        $totaux = [
+            'nb_axes'          => $data->count(),
+            'cout_maintenance' => $data->sum('cout_maintenance'),
+            'cout_carburant'   => $data->sum('cout_carburant'),
+            'cout_total'       => $data->sum('cout_total'),
+            'nb_affectations'  => $data->sum('nb_affectations'),
+            'litres_total'     => $data->sum('litres_total'),
+        ];
+
+        return $this->success([
+            'annee'   => $annee,
+            'totaux'  => $totaux,
+            'par_axe' => $data,
+        ]);
     }
 
     /**
@@ -275,4 +399,4 @@ class RapportController extends BaseApiController
 
         return $this->excelService->exportBonsCommande($annee, $agenceId);
     }
-} 
+}

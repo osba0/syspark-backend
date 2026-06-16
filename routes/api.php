@@ -18,6 +18,11 @@ use App\Http\Controllers\Api\V1\RapportController;
 use App\Http\Controllers\Api\V1\AdminController;
 use App\Http\Controllers\Api\V1\AgenceController;
 use App\Http\Controllers\Api\V1\AxeLivraisonController;
+use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\EmailQueueController;
+use App\Http\Controllers\Api\V1\RolePermissionController;
+use App\Http\Controllers\Api\V1\AuditLogController;
+use App\Http\Controllers\Api\V1\CommunicationController;
 use Illuminate\Support\Facades\Route;
 
 // ============================================================
@@ -25,10 +30,15 @@ use Illuminate\Support\Facades\Route;
 // ============================================================
 Route::prefix('v1')->name('v1.')->group(function () {
 
-    // Route publique — nom de l'application depuis .env (sans auth)
-    Route::get('app-info', fn () => response()->json([
-        'app_name' => config('app.name', 'Parc Auto'),
-    ]))->name('app.info');
+    // Route publique — nom de l'application + logos (favicon, page de login)
+    Route::get('app-info', function () {
+        $config = \App\Models\ConfigEntreprise::instance();
+        return response()->json([
+            'app_name'     => config('app.name', 'Parc Auto'),
+            'logo_url'     => $config->logo_url,
+            'logo_app_url' => $config->logo_app_url,
+        ]);
+    })->name('app.info');
 
     // Auth
     Route::prefix('auth')->name('auth.')->group(function () {
@@ -65,7 +75,6 @@ Route::prefix('v1')->name('v1.')->group(function () {
         });
 
         // --- Agences (lecture publique pour tous les rôles authentifiés) ---
-        // Utilisé par les selects dans tous les formulaires (carburant, documents, signalements…)
         Route::get('agences', [AgenceController::class, 'index'])
             ->name('agences.public');
         Route::get('admin/agences', [AgenceController::class, 'index'])
@@ -75,6 +84,44 @@ Route::prefix('v1')->name('v1.')->group(function () {
         // --- Axes de livraison (lecture publique pour tous les rôles authentifiés) ---
         Route::get('axes-livraison', [AxeLivraisonController::class, 'index'])
             ->name('axes-livraison.public');
+
+        // --- Notifications in-app ---
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+            Route::get('/',            [NotificationController::class, 'index'])->name('index');
+            Route::get('compteur',     [NotificationController::class, 'compteur'])->name('compteur');
+            Route::post('tout-lire',   [NotificationController::class, 'toutLire'])->name('tout-lire');
+            Route::post('{id}/lire',   [NotificationController::class, 'marquerLue'])->name('lire');
+            Route::delete('lues',      [NotificationController::class, 'viderLues'])->name('vider');
+            Route::delete('{id}',      [NotificationController::class, 'destroy'])->name('destroy');
+        });
+
+        // --- Journal d'audit (accès adapté au rôle — voir AuditLogController) ---
+        Route::prefix('audit-logs')->name('audit-logs.')->middleware('permission:admin.logs.view')->group(function () {
+            Route::get('/',            [AuditLogController::class, 'index'])->name('index');
+            Route::get('modules',      [AuditLogController::class, 'modules'])->name('modules');
+            Route::get('utilisateurs', [AuditLogController::class, 'utilisateurs'])->name('utilisateurs');
+        });
+
+        // --- Communication (Annonces / Notes de service) ---
+        // Routes accessibles à tous les rôles authentifiés ; le scoping fin
+        // (gestion vs consultation) est appliqué par CommunicationPolicy
+        // et CommunicationController.
+        Route::prefix('communications')->name('communications.')->group(function () {
+            // Consultation — tous rôles
+            Route::get('actives',             [CommunicationController::class, 'actives'])->name('actives');
+            Route::get('critiques-non-lues',  [CommunicationController::class, 'critiquesNonLues'])->name('critiques-non-lues');
+            Route::get('historique',          [CommunicationController::class, 'historique'])->name('historique');
+            Route::post('{communication}/lire', [CommunicationController::class, 'marquerLue'])->name('lire');
+
+            // Gestion — protégée par CommunicationPolicy
+            Route::get('/',                       [CommunicationController::class, 'index'])->name('index');
+            Route::post('/',                      [CommunicationController::class, 'store'])->name('store');
+            Route::get('{communication}',         [CommunicationController::class, 'show'])->name('show');
+            Route::put('{communication}',         [CommunicationController::class, 'update'])->name('update');
+            Route::delete('{communication}',      [CommunicationController::class, 'destroy'])->name('destroy');
+            Route::post('{communication}/publier', [CommunicationController::class, 'publier'])->name('publier');
+            Route::post('{communication}/archiver',[CommunicationController::class, 'archiver'])->name('archiver');
+        });
 
         // --- Véhicules ---
         Route::prefix('vehicules')->name('vehicules.')->group(function () {
@@ -93,10 +140,10 @@ Route::prefix('v1')->name('v1.')->group(function () {
             Route::get('{vehicule}/affectations',  [VehiculeController::class, 'affectations'])->name('affectations');
             Route::get('{vehicule}/alertes',       [VehiculeController::class, 'alertes'])->name('alertes');
             // Photos
-            Route::get('{vehicule}/photos',        [VehiculeController::class, 'photos'])->name('photos');
-            Route::post('{vehicule}/photos',       [VehiculeController::class, 'uploadPhoto'])->name('photos.upload');
-            Route::delete('{vehicule}/photos/{mediaId}', [VehiculeController::class, 'deletePhoto'])->name('photos.delete');
-            Route::put('{vehicule}/photos/{mediaId}/principale', [VehiculeController::class, 'setPhotoPrincipale'])->name('photos.principale');
+            Route::get('{vehicule}/photos',                          [VehiculeController::class, 'photos'])->name('photos');
+            Route::post('{vehicule}/photos',                         [VehiculeController::class, 'uploadPhoto'])->name('photos.upload');
+            Route::delete('{vehicule}/photos/{mediaId}',             [VehiculeController::class, 'deletePhoto'])->name('photos.delete');
+            Route::put('{vehicule}/photos/{mediaId}/principale',     [VehiculeController::class, 'setPhotoPrincipale'])->name('photos.principale');
         });
 
         // --- Chauffeurs ---
@@ -105,8 +152,6 @@ Route::prefix('v1')->name('v1.')->group(function () {
             Route::post('/',                           [ChauffeurController::class, 'store'])->name('store');
             Route::get('{chauffeur}',                  [ChauffeurController::class, 'show'])->name('show');
             Route::put('{chauffeur}',                  [ChauffeurController::class, 'update'])->name('update');
-            // Route POST pour le method spoofing (_method=PUT) — nécessaire pour
-            // les uploads multipart/form-data car PHP ne parse pas le body d'un PUT
             Route::post('{chauffeur}',                 [ChauffeurController::class, 'update'])->name('update.multipart');
             Route::delete('{chauffeur}',               [ChauffeurController::class, 'destroy'])->name('destroy');
             Route::get('{chauffeur}/vehicule-actuel',  [ChauffeurController::class, 'vehiculeActuel'])->name('vehicule');
@@ -138,14 +183,14 @@ Route::prefix('v1')->name('v1.')->group(function () {
 
         // --- Signalements ---
         Route::prefix('signalements')->name('signalements.')->group(function () {
-            Route::get('/',                                    [SignalementController::class, 'index'])->name('index');
-            Route::post('/',                                   [SignalementController::class, 'store'])->name('store');
-            Route::get('{signalement}',                        [SignalementController::class, 'show'])->name('show');
-            Route::put('{signalement}',                        [SignalementController::class, 'update'])->name('update');
-            Route::post('{signalement}/prendre-en-charge',     [SignalementController::class, 'prendreEnCharge'])->name('pec');
-            Route::post('{signalement}/resoudre',              [SignalementController::class, 'resoudre'])->name('resoudre');
-            Route::post('{signalement}/creer-maintenance',     [SignalementController::class, 'creerMaintenance'])->name('maintenance');
-            Route::post('{signalement}/photos',                [SignalementController::class, 'uploadPhotos'])->name('photos');
+            Route::get('/',                                [SignalementController::class, 'index'])->name('index');
+            Route::post('/',                               [SignalementController::class, 'store'])->name('store');
+            Route::get('{signalement}',                    [SignalementController::class, 'show'])->name('show');
+            Route::put('{signalement}',                    [SignalementController::class, 'update'])->name('update');
+            Route::post('{signalement}/prendre-en-charge', [SignalementController::class, 'prendreEnCharge'])->name('pec');
+            Route::post('{signalement}/resoudre',          [SignalementController::class, 'resoudre'])->name('resoudre');
+            Route::post('{signalement}/creer-maintenance', [SignalementController::class, 'creerMaintenance'])->name('maintenance');
+            Route::post('{signalement}/photos',            [SignalementController::class, 'uploadPhotos'])->name('photos');
         });
 
         // --- Maintenances ---
@@ -175,18 +220,18 @@ Route::prefix('v1')->name('v1.')->group(function () {
         });
 
         // --- Pneumatiques ---
-        Route::get('pneumatiques/stats',           [PneumatiqueController::class, 'stats'])->name('pneumatiques.stats');
-        Route::apiResource('pneumatiques',          PneumatiqueController::class);
+        Route::get('pneumatiques/stats', [PneumatiqueController::class, 'stats'])->name('pneumatiques.stats');
+        Route::apiResource('pneumatiques', PneumatiqueController::class);
 
         // --- Documents véhicules ---
         Route::prefix('documents')->name('documents.')->group(function () {
-            Route::get('/',                            [DocumentController::class, 'index'])->name('index');
-            Route::post('/',                           [DocumentController::class, 'store'])->name('store');
-            Route::get('expiration-prochaine',         [DocumentController::class, 'expirationProchaine'])->name('expiration');
-            Route::get('{document}',                   [DocumentController::class, 'show'])->name('show');
-            Route::put('{document}',                   [DocumentController::class, 'update'])->name('update');
-            Route::delete('{document}',                [DocumentController::class, 'destroy'])->name('destroy');
-            Route::post('{document}/renouveler',       [DocumentController::class, 'renouveler'])->name('renouveler');
+            Route::get('/',                        [DocumentController::class, 'index'])->name('index');
+            Route::post('/',                       [DocumentController::class, 'store'])->name('store');
+            Route::get('expiration-prochaine',     [DocumentController::class, 'expirationProchaine'])->name('expiration');
+            Route::get('{document}',               [DocumentController::class, 'show'])->name('show');
+            Route::put('{document}',               [DocumentController::class, 'update'])->name('update');
+            Route::delete('{document}',            [DocumentController::class, 'destroy'])->name('destroy');
+            Route::post('{document}/renouveler',   [DocumentController::class, 'renouveler'])->name('renouveler');
         });
 
         // --- Bons de commande ---
@@ -206,22 +251,24 @@ Route::prefix('v1')->name('v1.')->group(function () {
         Route::apiResource('fournisseurs', FournisseurController::class);
         Route::get('fournisseurs/{fournisseur}/interventions', [FournisseurController::class, 'interventions']);
         Route::get('fournisseurs/{fournisseur}/stats',         [FournisseurController::class, 'stats']);
+        Route::post('fournisseurs/{fournisseur}/logo',         [FournisseurController::class, 'uploadLogo']);
+        Route::delete('fournisseurs/{fournisseur}/logo',       [FournisseurController::class, 'deleteLogo']);
 
         // --- Alertes ---
         Route::prefix('alertes')->name('alertes.')->group(function () {
-            Route::get('/',                       [AlerteController::class, 'index'])->name('index');
-            Route::get('non-lues',                [AlerteController::class, 'nonLues'])->name('non-lues');
-            Route::put('{alerte}/lue',            [AlerteController::class, 'marquerLue'])->name('lue');
-            Route::post('marquer-toutes-lues',    [AlerteController::class, 'marquerToutesLues'])->name('toutes-lues');
+            Route::get('/',                    [AlerteController::class, 'index'])->name('index');
+            Route::get('non-lues',             [AlerteController::class, 'nonLues'])->name('non-lues');
+            Route::put('{alerte}/lue',         [AlerteController::class, 'marquerLue'])->name('lue');
+            Route::post('marquer-toutes-lues', [AlerteController::class, 'marquerToutesLues'])->name('toutes-lues');
         });
 
         // --- Rapports (données JSON + exports fichiers) ---
         Route::prefix('rapports')->name('rapports.')->group(function () {
-            Route::get('maintenance',  [RapportController::class, 'maintenance'])->name('maintenance');
-            Route::get('carburant',    [RapportController::class, 'carburant'])->name('carburant');
-            Route::get('tco',          [RapportController::class, 'tco'])->name('tco');
-            Route::get('axes',         [RapportController::class, 'axes'])->name('axes');
-            Route::get('parc-global',  [RapportController::class, 'parcGlobal'])->name('parc');
+            Route::get('maintenance', [RapportController::class, 'maintenance'])->name('maintenance');
+            Route::get('carburant',   [RapportController::class, 'carburant'])->name('carburant');
+            Route::get('tco',         [RapportController::class, 'tco'])->name('tco');
+            Route::get('axes',        [RapportController::class, 'axes'])->name('axes');
+            Route::get('parc-global', [RapportController::class, 'parcGlobal'])->name('parc');
 
             Route::prefix('pdf')->name('pdf.')->group(function () {
                 Route::get('signalement/{signalement}',  [RapportController::class, 'pdfSignalement'])->name('signalement');
@@ -241,19 +288,35 @@ Route::prefix('v1')->name('v1.')->group(function () {
         });
 
         // --- Administration ---
-        // IMPORTANT : 'check.role' = notre CheckRole custom, PAS le middleware Spatie 'role:'.
-        // Le middleware Spatie interprète le 2ème param comme guard → erreur "guard [directeur] not defined".
         Route::prefix('admin')->name('admin.')->middleware('check.role:super_admin,directeur')->group(function () {
             Route::apiResource('users', AdminController::class);
-            Route::post('users/{user}/toggle-actif',    [AdminController::class, 'toggleActif'])->name('users.toggle');
-            Route::post('users/{user}/reset-password',  [AdminController::class, 'resetPassword'])->name('users.reset-pwd');
-            Route::apiResource('agences',               AgenceController::class);
-            Route::apiResource('axes-livraison', AxeLivraisonController::class);
-            Route::get('logs',                   [AdminController::class, 'logs'])->name('logs');
+            Route::post('users/{user}/toggle-actif',   [AdminController::class, 'toggleActif'])->name('users.toggle');
+            Route::post('users/{user}/reset-password', [AdminController::class, 'resetPassword'])->name('users.reset-pwd');
+            Route::apiResource('agences',              AgenceController::class);
+            Route::apiResource('axes-livraison',       AxeLivraisonController::class);
+            Route::get('logs',                         [AdminController::class, 'logs'])->name('logs');
+
+            // Rôles & permissions — super_admin uniquement
+            Route::prefix('roles')->name('roles.')->middleware('check.role:super_admin')->group(function () {
+                Route::get('/',                             [RolePermissionController::class, 'index'])->name('index');
+                Route::get('{role}/permissions',            [RolePermissionController::class, 'show'])->name('permissions.show');
+                Route::put('{role}/permissions',            [RolePermissionController::class, 'sync'])->name('permissions.sync');
+                Route::post('{role}/permissions/attribuer', [RolePermissionController::class, 'attribuer'])->name('permissions.attribuer');
+                Route::post('{role}/permissions/retirer',   [RolePermissionController::class, 'retirer'])->name('permissions.retirer');
+            });
 
             // Configuration entreprise
-            Route::get('config',  [AdminController::class, 'getConfig'])->name('config.get')->withoutMiddleware('check.role:super_admin,directeur');
+            Route::get('config',  [AdminController::class, 'getConfig'])->name('config.get')
+                ->withoutMiddleware('check.role:super_admin,directeur');
             Route::post('config', [AdminController::class, 'updateConfig'])->middleware('check.role:super_admin')->name('config.update');
+
+            // File d'attente emails — audit et stats
+            Route::prefix('email-queue')->name('email-queue.')->group(function () {
+                Route::get('/',                [EmailQueueController::class, 'index'])->name('index');
+                Route::get('stats',            [EmailQueueController::class, 'stats'])->name('stats');
+                Route::post('{email}/relancer',[EmailQueueController::class, 'relancer'])->name('relancer');
+                Route::delete('purger-envoyes',[EmailQueueController::class, 'purgerEnvoyes'])->name('purger');
+            });
 
             // Tâches système — super_admin uniquement
             Route::post('system/run-command', [AdminController::class, 'runCommand'])

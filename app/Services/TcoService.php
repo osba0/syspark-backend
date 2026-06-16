@@ -87,9 +87,19 @@ class TcoService
         $posteEquipement      = (float)($maintenance->equipement       ?? 0);
         $posteVisiteTech      = (float)($maintenance->visite_technique ?? 0);
         $posteContravention   = (float)($maintenance->contravention    ?? 0);
-        // Pneus = maintenances type "pneu" + table pneumatiques séparée
+        // Pneus = maintenances type "pneu" (legacy) + table pneumatiques dédiée
         $postePneuMaint       = (float)($maintenance->pneu_maintenance ?? 0);
-        $postePneuTotal       = $postePneuMaint + $totalPneus;
+
+        // ⚠️ ÉVITER LE DOUBLE COMPTAGE
+        // Depuis l'intégration du module Pneumatiques (table dédiée), c'est la
+        // SOURCE DE VÉRITÉ pour les coûts pneus. Le type 'pneu' dans Maintenance
+        // est conservé pour compatibilité avec l'historique, mais EXCLU du total
+        // afin d'éviter qu'une même opération soit comptée deux fois (une fois
+        // comme maintenance type=pneu, une fois dans la table pneumatiques).
+        //
+        // postePneuMaint reste affiché séparément (legacy_pneu_maintenance) pour
+        // permettre à l'admin d'identifier et nettoyer les doublons existants.
+        $postePneuTotal       = $totalPneus;
 
         // Total global = somme réelle de TOUS les postes
         $totalGlobal = $posteEntretien
@@ -129,6 +139,12 @@ class TcoService
                 'carburant'        => round($totalCarburant,      2),
                 'bons_commande'    => round($totalBonsCommande,   2),
             ],
+
+            // Audit — montant des maintenances type='pneu' (legacy, NON inclus dans total_global)
+            // Si > 0, des opérations pneus existent encore dans le module Maintenance
+            // et devraient être migrées/saisies via le module Pneumatiques dédié.
+            'legacy_pneu_maintenance'      => round($postePneuMaint, 2),
+            'alerte_doublon_pneus_possible'=> $postePneuMaint > 0 && $totalPneus > 0,
 
             // Totaux intermédiaires
             'total_maintenance'   => round($totalMaintenance,   2),

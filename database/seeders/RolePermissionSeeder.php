@@ -59,6 +59,13 @@ class RolePermissionSeeder extends Seeder
             'signalement.resoudre',
             'signalement.uploadPhoto',
 
+            // --- Communication (Annonces / Notes de service) ---
+            'communication.viewAny',  // Voir la liste de gestion (auteur/édition)
+            'communication.create',   // Créer une annonce/note (brouillon)
+            'communication.update',
+            'communication.delete',
+            'communication.publish',  // Publier / archiver
+
             // --- Maintenance ---
             'maintenance.viewAny',
             'maintenance.view',
@@ -171,6 +178,9 @@ class RolePermissionSeeder extends Seeder
             'rapport.view', 'rapport.export', 'rapport.viewFinancier',
             'dashboard.view', 'dashboard.viewStats',
             'admin.logs.view',
+            // Communication — direction valide/publie tout
+            'communication.viewAny', 'communication.create', 'communication.update',
+            'communication.delete', 'communication.publish',
         ]);
 
         // ----------------------------------------------------------
@@ -219,6 +229,11 @@ class RolePermissionSeeder extends Seeder
             'rapport.view', 'rapport.export', 'rapport.viewFinancier',
             // Dashboard
             'dashboard.view', 'dashboard.viewStats',
+            // Audit — journal complet (multi-agences)
+            'admin.logs.view',
+            // Communication
+            'communication.viewAny', 'communication.create', 'communication.update',
+            'communication.delete', 'communication.publish',
         ]);
 
         // ----------------------------------------------------------
@@ -248,6 +263,11 @@ class RolePermissionSeeder extends Seeder
             'alerte.viewAny', 'alerte.view', 'alerte.markRead',
             'rapport.view', 'rapport.export',
             'dashboard.view', 'dashboard.viewStats',
+            // Audit — journal de son agence uniquement
+            'admin.logs.view',
+            // Communication — peut publier pour son agence
+            'communication.viewAny', 'communication.create', 'communication.update',
+            'communication.delete', 'communication.publish',
         ]);
 
         // ----------------------------------------------------------
@@ -255,10 +275,9 @@ class RolePermissionSeeder extends Seeder
         // ----------------------------------------------------------
         $chauffeur = Role::findOrCreate('chauffeur', 'web');
         $chauffeur->syncPermissions([
-            'checklist.viewAny',
-            'vehicule.viewAny',
             'vehicule.view',            // Son véhicule uniquement (géré par Policy)
             'vehicule.updateKm',        // Déclarer son kilométrage
+            'checklist.viewAny',        // Lister les checklists (scopées par Policy/Controller)
             'checklist.view',           // Voir ses checklists
             'checklist.create',         // Saisir une checklist
             'checklist.submit',         // Soumettre pour validation
@@ -270,6 +289,8 @@ class RolePermissionSeeder extends Seeder
             'alerte.view',              // Voir ses alertes
             'alerte.markRead',          // Marquer comme lue
             'dashboard.view',
+            // Audit — uniquement les actions le concernant personnellement
+            'admin.logs.view',
         ]);
 
         // ----------------------------------------------------------
@@ -285,6 +306,8 @@ class RolePermissionSeeder extends Seeder
             'alerte.view',
             'alerte.markRead',
             'dashboard.view',
+            // Audit — uniquement les actions le concernant personnellement
+            'admin.logs.view',
         ]);
 
         // ----------------------------------------------------------
@@ -302,6 +325,8 @@ class RolePermissionSeeder extends Seeder
             'rapport.view', 'rapport.export', 'rapport.viewFinancier',
             'dashboard.view', 'dashboard.viewStats',
             'alerte.view', 'alerte.markRead',
+            // Audit — journal de son agence uniquement
+            'admin.logs.view',
         ]);
 
         $this->command->info('✅  7 rôles créés avec permissions.');

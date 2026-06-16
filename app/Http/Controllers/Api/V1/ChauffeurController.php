@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateChauffeurRequest;
 use App\Http\Resources\ChauffeurResource;
 use App\Models\Chauffeur;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -18,6 +19,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class ChauffeurController extends BaseApiController
 {
+    public function __construct(
+        private NotificationService $notificationService,
+    ) {}
     /**
      * GET /api/v1/chauffeurs
      */
@@ -114,6 +118,14 @@ class ChauffeurController extends BaseApiController
             DB::rollBack();
             return $this->error('Erreur lors de la création : ' . $e->getMessage(), 500);
         }
+
+        // Notification
+        $this->notificationService->chauffeurCree([
+            'id'                => $chauffeur->id,
+            'nom_complet'       => $chauffeur->nom_complet,
+            'matricule_interne' => $chauffeur->matricule_interne ?? '—',
+            'agence_id'         => $chauffeur->agence_id,
+        ]);
 
         return $this->created(
             new ChauffeurResource($chauffeur->load('agence')),
@@ -235,6 +247,14 @@ class ChauffeurController extends BaseApiController
                 422
             );
         }
+
+        // Notification — capturer les infos avant suppression
+        $this->notificationService->chauffeurSupprime([
+            'nom_complet'       => $chauffeur->nom_complet,
+            'matricule_interne' => $chauffeur->matricule_interne ?? '—',
+            'agence_id'         => $chauffeur->agence_id,
+            'supprime_par'      => auth()->user()->nom_complet ?? auth()->user()->name,
+        ]);
 
         $chauffeur->delete();
 

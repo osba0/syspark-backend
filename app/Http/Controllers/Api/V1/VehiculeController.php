@@ -8,6 +8,7 @@ use App\Http\Resources\VehiculeResource;
 use App\Http\Resources\VehiculeCollection;
 use App\Models\Vehicule;
 use App\Services\TcoService;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Spatie\QueryBuilder\AllowedFilter;
@@ -15,7 +16,10 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class VehiculeController extends BaseApiController
 {
-    public function __construct(private TcoService $tcoService) {}
+    public function __construct(
+        private TcoService           $tcoService,
+        private NotificationService  $notificationService,
+    ) {}
 
     /**
      * GET /api/v1/vehicules
@@ -77,6 +81,15 @@ class VehiculeController extends BaseApiController
                 $vehicule->kilometrage_actuel + $vehicule->intervalle_entretien_km,
         ]);
 
+        // Notification
+        $this->notificationService->vehiculeCree([
+            'id'              => $vehicule->id,
+            'immatriculation' => $vehicule->immatriculation,
+            'marque'          => $vehicule->marque,
+            'modele'          => $vehicule->modele,
+            'agence_id'       => $vehicule->agence_id,
+        ]);
+
         return $this->created(new VehiculeResource($vehicule->load('agence')));
     }
 
@@ -129,6 +142,15 @@ class VehiculeController extends BaseApiController
                 422
             );
         }
+
+        // Notification — capturer les infos avant suppression
+        $this->notificationService->vehiculeSupprime([
+            'immatriculation' => $vehicule->immatriculation,
+            'marque'          => $vehicule->marque,
+            'modele'          => $vehicule->modele,
+            'agence_id'       => $vehicule->agence_id,
+            'supprime_par'    => auth()->user()->nom_complet ?? auth()->user()->name,
+        ]);
 
         $vehicule->delete();
 

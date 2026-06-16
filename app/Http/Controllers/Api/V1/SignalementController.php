@@ -6,6 +6,7 @@ use App\Http\Requests\StoreSignalementRequest;
 use App\Http\Resources\SignalementResource;
 use App\Models\Maintenance;
 use App\Models\Signalement;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,6 +15,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class SignalementController extends BaseApiController
 {
+    public function __construct(
+        private NotificationService $notificationService,
+    ) {}
     /**
      * GET /api/v1/signalements
      */
@@ -86,15 +90,21 @@ class SignalementController extends BaseApiController
             }
         }
 
+        // Notification création
+        $signalement->loadMissing(['vehicule', 'chauffeur']);
+        $this->notificationService->signalementCree([
+            'id'              => $signalement->id,
+            'titre'           => $signalement->titre,
+            'gravite'         => $signalement->gravite,
+            'immatriculation' => $signalement->vehicule?->immatriculation ?? '—',
+            'agence_id'       => $signalement->vehicule?->agence_id,
+        ], $request->user()->id);
+
         return $this->created(
             new SignalementResource($signalement->load(['vehicule', 'chauffeur'])),
             'Signalement créé avec succès.'
         );
     }
-
-    /**
-     * GET /api/v1/signalements/{signalement}
-     */
     public function show(Signalement $signalement): JsonResponse
     {
         $this->authorize('view', $signalement);
@@ -150,6 +160,15 @@ class SignalementController extends BaseApiController
             'pris_en_charge_le'  => now(),
         ]);
 
+        // Notification changement de statut
+        $signalement->loadMissing('vehicule');
+        $this->notificationService->signalementStatutChange([
+            'id'              => $signalement->id,
+            'statut'          => 'en_cours',
+            'immatriculation' => $signalement->vehicule?->immatriculation ?? '—',
+            'agence_id'       => $signalement->vehicule?->agence_id,
+        ], $signalement->created_by);
+
         return $this->success(
             new SignalementResource($signalement->fresh()),
             'Signalement pris en charge.'
@@ -177,6 +196,14 @@ class SignalementController extends BaseApiController
             'resolu_le'               => now(),
             'commentaire_resolution'  => $request->commentaire_resolution,
         ]);
+
+        // Notification résolution
+        $this->notificationService->signalementStatutChange([
+            'id'              => $signalement->id,
+            'statut'          => 'resolu',
+            'immatriculation' => $signalement->vehicule?->immatriculation ?? '—',
+            'agence_id'       => $signalement->vehicule?->agence_id,
+        ], $signalement->created_by);
 
         return $this->success(
             new SignalementResource($signalement->fresh()),

@@ -7,6 +7,7 @@ use App\Http\Requests\RenouvelerDocumentRequest;
 use App\Http\Resources\DocumentResource;
 use App\Models\DocumentVehicule;
 use App\Models\Vehicule;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class DocumentController extends BaseApiController
 {
+    public function __construct(
+        private NotificationService $notificationService,
+    ) {}
     /**
      * GET /api/v1/documents
      */
@@ -119,6 +123,16 @@ class DocumentController extends BaseApiController
             return $this->error('Erreur lors de l\'enregistrement : ' . $e->getMessage(), 500);
         }
 
+        // Notification
+        $vehicule = $document->vehicule ?? Vehicule::find($document->vehicule_id);
+        $this->notificationService->documentAjoute([
+            'id'              => $document->id,
+            'type'            => $document->type_document,
+            'immatriculation' => $vehicule?->immatriculation ?? '—',
+            'vehicule_id'     => $document->vehicule_id,
+            'agence_id'       => $vehicule?->agence_id,
+        ]);
+
         return $this->created(
             new DocumentResource($document->load('vehicule')),
             'Document enregistré avec succès.'
@@ -171,6 +185,16 @@ class DocumentController extends BaseApiController
     {
         $this->authorize('delete', $document);
 
+        // Capturer les infos avant suppression
+        $document->loadMissing('vehicule');
+        $infosNotif = [
+            'type'            => $document->type_document,
+            'immatriculation' => $document->vehicule?->immatriculation ?? '—',
+            'vehicule_id'     => $document->vehicule_id,
+            'agence_id'       => $document->vehicule?->agence_id,
+            'supprime_par'    => auth()->user()->nom_complet ?? auth()->user()->name,
+        ];
+
         // Supprimer le fichier physique si présent
         if ($document->fichier_path) {
             $disk = config('parc.uploads.disque', 'public');
@@ -180,6 +204,9 @@ class DocumentController extends BaseApiController
         }
 
         $document->delete();
+
+        // Notification
+        $this->notificationService->documentSupprime($infosNotif);
 
         return $this->noContent('Document supprimé.');
     }

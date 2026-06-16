@@ -32,6 +32,20 @@ class AxeLivraisonController extends BaseApiController
 
         $axes = $query->paginate($this->perPage($request));
 
+        // Compteurs globaux (actifs/inactifs) sur l'ensemble du périmètre
+        // (même scope agence, indépendant du filtre est_actif/pagination)
+        $countsQuery = AxeLivraison::query();
+        $this->applyAgenceScope($countsQuery, $request);
+        if ($request->filled('filter.agence_id')) {
+            $countsQuery->where('agence_id', $request->input('filter.agence_id'));
+        }
+        if ($request->filled('filter.nom')) {
+            $countsQuery->where('nom', 'like', '%' . $request->input('filter.nom') . '%');
+        }
+
+        $nbActifs   = (clone $countsQuery)->where('est_actif', true)->count();
+        $nbInactifs = (clone $countsQuery)->where('est_actif', false)->count();
+
         return response()->json([
             'data' => $axes->items(),
             'meta' => [
@@ -39,6 +53,8 @@ class AxeLivraisonController extends BaseApiController
                 'per_page'     => $axes->perPage(),
                 'current_page' => $axes->currentPage(),
                 'last_page'    => $axes->lastPage(),
+                'nb_actifs'    => $nbActifs,
+                'nb_inactifs'  => $nbInactifs,
             ],
         ]);
     }

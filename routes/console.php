@@ -13,6 +13,21 @@ use Illuminate\Support\Facades\Schedule;
 //   * * * * * cd /path/to/project && php artisan schedule:run >> /dev/null 2>&1
 // ============================================================
 
+// ── TOUTES LES MINUTES ───────────────────────────────────────
+
+/**
+ * Traitement de la file d'attente d'emails de notification
+ * Table : notification_emails (statuts pending → sent / failed)
+ * Inclut la relance automatique des échecs (backoff exponentiel)
+ */
+Schedule::command('email-queue:process')
+    ->everyMinute()
+    ->name('process-email-queue')
+    ->withoutOverlapping()
+    ->onFailure(function () {
+        \Illuminate\Support\Facades\Log::error('[Scheduler] email-queue:process a échoué');
+    });
+
 // ── QUOTIDIEN ────────────────────────────────────────────────
 
 /**

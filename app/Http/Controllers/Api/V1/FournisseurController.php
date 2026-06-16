@@ -26,8 +26,14 @@ class FournisseurController extends BaseApiController
                 AllowedFilter::exact('est_actif'),
             ])
             ->allowedSorts(['nom', 'type', 'ville', 'created_at'])
-            ->defaultSort('nom')
-            ->where('est_actif', true);
+            ->defaultSort('nom');
+
+        // Par défaut on n'affiche que les fournisseurs actifs (utilisation
+        // dans les selects des formulaires). Si le frontend demande
+        // explicitement un statut (gestion/admin), on respecte ce filtre.
+        if (!$request->has('filter.est_actif')) {
+            $query->where('est_actif', true);
+        }
 
         $fournisseurs = $query->paginate($this->perPage($request));
 
@@ -44,6 +50,12 @@ class FournisseurController extends BaseApiController
     {
         $this->authorize('create', Fournisseur::class);
         $fournisseur = Fournisseur::create($request->validated());
+
+        // Logo optionnel à la création — même requête multipart
+        if ($request->hasFile('logo')) {
+            $fournisseur->addMediaFromRequest('logo')->toMediaCollection('logo');
+        }
+
         return $this->created(new FournisseurResource($fournisseur), 'Fournisseur créé.');
     }
 
@@ -62,7 +74,7 @@ class FournisseurController extends BaseApiController
     {
         $this->authorize('update', Fournisseur::class);
 
-        $request->validate([
+        $data = $request->validate([
             'nom'        => ['sometimes', 'string', 'max:150'],
             'type'       => ['nullable', 'string', 'max:50'],
             'telephone'  => ['nullable', 'string', 'max:30'],
@@ -75,8 +87,38 @@ class FournisseurController extends BaseApiController
             'notes'      => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $fournisseur->update($request->validated());
+        $fournisseur->update($data);
         return $this->success(new FournisseurResource($fournisseur->fresh()));
+    }
+
+    /**
+     * POST /api/v1/fournisseurs/{fournisseur}/logo
+     * Upload (ou remplace) le logo du fournisseur. Champ multipart 'logo'.
+     */
+    public function uploadLogo(Request $request, Fournisseur $fournisseur): JsonResponse
+    {
+        $this->authorize('update', Fournisseur::class);
+
+        $request->validate([
+            'logo' => ['required', 'image', 'max:2048'],
+        ]);
+
+        $fournisseur->addMediaFromRequest('logo')->toMediaCollection('logo');
+
+        return $this->success(new FournisseurResource($fournisseur->fresh()), 'Logo mis à jour.');
+    }
+
+    /**
+     * DELETE /api/v1/fournisseurs/{fournisseur}/logo
+     * Retire le logo du fournisseur.
+     */
+    public function deleteLogo(Fournisseur $fournisseur): JsonResponse
+    {
+        $this->authorize('update', Fournisseur::class);
+
+        $fournisseur->clearMediaCollection('logo');
+
+        return $this->success(new FournisseurResource($fournisseur->fresh()), 'Logo supprimé.');
     }
 
     /**

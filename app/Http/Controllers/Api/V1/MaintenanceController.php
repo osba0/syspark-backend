@@ -8,6 +8,7 @@ use App\Http\Resources\MaintenanceResource;
 use App\Models\Maintenance;
 use App\Models\Signalement;
 use App\Models\Vehicule;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,6 +17,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class MaintenanceController extends BaseApiController
 {
+    public function __construct(
+        private NotificationService $notificationService,
+    ) {}
     /**
      * GET /api/v1/maintenances
      */
@@ -208,6 +212,16 @@ class MaintenanceController extends BaseApiController
 
         $maintenance = Maintenance::create($data);
 
+        // Notification
+        $maintenance->loadMissing('vehicule');
+        $this->notificationService->maintenanceCreee([
+            'id'              => $maintenance->id,
+            'titre'           => $maintenance->titre ?? $maintenance->type_operation,
+            'type_operation'  => $maintenance->type_operation,
+            'immatriculation' => $maintenance->vehicule?->immatriculation ?? '—',
+            'agence_id'       => $maintenance->agence_id,
+        ]);
+
         return $this->created(
             new MaintenanceResource($maintenance->load(['vehicule', 'fournisseur'])),
             $data['necessite_approbation']
@@ -371,6 +385,15 @@ class MaintenanceController extends BaseApiController
             DB::rollBack();
             return $this->error('Erreur lors de la clôture : ' . $e->getMessage(), 500);
         }
+
+        // Notification clôture
+        $this->notificationService->maintenanceCloturee([
+            'id'              => $maintenance->id,
+            'titre'           => $maintenance->titre ?? $maintenance->type_operation,
+            'immatriculation' => $maintenance->vehicule?->immatriculation ?? '—',
+            'montant_ttc'     => $maintenance->montant_ttc,
+            'agence_id'       => $maintenance->agence_id,
+        ]);
 
         return $this->success(
             new MaintenanceResource($maintenance->fresh(['vehicule', 'fournisseur'])),

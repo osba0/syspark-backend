@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\Traits\LogsActivity;
 use Spatie\Activitylog\LogOptions;
+use Spatie\MediaLibrary\HasMedia;
+use Spatie\MediaLibrary\InteractsWithMedia;
 
-class Fournisseur extends Model
+class Fournisseur extends Model implements HasMedia
 {
-    use LogsActivity;
+    use LogsActivity, InteractsWithMedia;
 
     protected $fillable = [
         'nom', 'type', 'telephone', 'email',
@@ -24,6 +26,15 @@ class Fournisseur extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()->logFillable()->logOnlyDirty();
+    }
+
+    public function registerMediaCollections(): void
+    {
+        // Logo optionnel — un seul fichier, remplacé automatiquement
+        // si un nouveau logo est uploadé (singleFile)
+        $this->addMediaCollection('logo')
+            ->singleFile()
+            ->acceptsMimeTypes(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml']);
     }
 
     public function maintenances(): HasMany

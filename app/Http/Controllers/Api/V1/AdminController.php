@@ -175,6 +175,7 @@ class AdminController extends BaseApiController
         'media-library:regenerate'      => 'Régénérer les miniatures des photos',
         'permission:cache-reset'        => 'Vider le cache des permissions',
         'cache:clear'                   => 'Vider le cache application',
+        'email-queue:process'           => 'Envoyer les emails de notification en attente',
     ];
 
     public function runCommand(Request $request): JsonResponse

@@ -23,6 +23,8 @@ class StoreFournisseurRequest extends FormRequest
             'specialite' => ['nullable', 'string', 'max:150'],
             'ninea'      => ['nullable', 'string', 'max:50'],
             'notes'      => ['nullable', 'string', 'max:1000'],
+            // Logo optionnel — géré via Media Library
+            'logo'       => ['nullable', 'image', 'max:2048'],
         ];
     }
 }

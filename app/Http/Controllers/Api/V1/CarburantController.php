@@ -9,6 +9,7 @@ use App\Http\Resources\CarburantResource;
 use App\Models\Carburant;
 use App\Models\DotationCarburant;
 use App\Models\Vehicule;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class CarburantController extends BaseApiController
 {
+    public function __construct(
+        private NotificationService $notificationService,
+    ) {}
     /**
      * GET /api/v1/carburant
      */
@@ -108,6 +112,18 @@ class CarburantController extends BaseApiController
             DB::rollBack();
             return $this->error('Erreur lors de l\'enregistrement : ' . $e->getMessage(), 500);
         }
+
+        // Notification
+        $carburant->loadMissing(['vehicule', 'chauffeur']);
+        $this->notificationService->pleinCarburant([
+            'id'              => $carburant->id,
+            'litres'          => $carburant->litres,
+            'montant'         => $carburant->montant,
+            'immatriculation' => $carburant->vehicule?->immatriculation ?? '—',
+            'chauffeur'       => $carburant->chauffeur?->nom_complet ?? '—',
+            'vehicule_id'     => $carburant->vehicule_id,
+            'agence_id'       => $carburant->agence_id,
+        ]);
 
         return $this->created(
             new CarburantResource($carburant->load(['vehicule', 'chauffeur'])),

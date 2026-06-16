@@ -6,6 +6,7 @@ use App\Models\Alerte;
 use App\Models\Carburant;
 use App\Models\DotationCarburant;
 use App\Models\Maintenance;
+use App\Models\Pneumatique;
 use App\Models\Signalement;
 use App\Models\Vehicule;
 use Illuminate\Support\Facades\Cache;
@@ -66,6 +67,12 @@ class StatistiqueService
 
         $carburant = (clone $cBase)->selectRaw('SUM(montant) as total, SUM(litres) as litres')->first();
 
+        // --- Pneumatiques du mois (module dédié, hors Maintenance) ---
+        $pBase = Pneumatique::whereYear('date', $annee)->whereMonth('date', $mois)
+            ->when($agenceId, fn ($q) => $q->where('agence_id', $agenceId));
+
+        $pneus = (clone $pBase)->selectRaw('SUM(montant_total) as total, COUNT(*) as nb')->first();
+
         // --- Dotation carburant du mois ---
         $dotation = DotationCarburant::where('mois', $mois)->where('annee', $annee)
             ->when($agenceId, fn ($q) => $q->where('agence_id', $agenceId))
@@ -124,6 +131,10 @@ class StatistiqueService
                 'taux_conso'    => $dotation > 0
                     ? round(((float)($carburant->total ?? 0) / (float)$dotation) * 100, 1)
                     : null,
+            ],
+            'pneus'       => [
+                'depenses_mois'    => round((float)($pneus->total ?? 0), 2),
+                'nb_operations'    => (int)($pneus->nb ?? 0),
             ],
             'signalements' => [
                 'total_ouverts' => (clone $signalBase)->count(),
@@ -197,6 +208,14 @@ class StatistiqueService
             ->selectRaw('MONTH(date_signalement) as mois, COUNT(*) as nb')
             ->groupBy('mois')->get()->keyBy('mois');
 
+        // Pneumatiques par mois (module dédié — source de vérité, distinct
+        // du champ legacy "pneu" sur maintenances pour éviter le double comptage)
+        $pneumatiques = DB::table('pneumatiques')
+            ->whereYear('date', $annee)
+            ->when($agenceId, fn ($q) => $q->where('agence_id', $agenceId))
+            ->selectRaw('MONTH(date) as mois, SUM(montant_total) as total, COUNT(*) as nb')
+            ->groupBy('mois')->get()->keyBy('mois');
+
         $series = collect(range(1, 12))->map(fn ($m) => [
             'mois'             => $moisLabels[$m - 1],
             'mois_num'         => $m,
@@ -204,12 +223,16 @@ class StatistiqueService
             'entretien'        => round((float)($maintenance[$m]?->entretien ?? 0), 2),
             'reparation'       => round((float)($maintenance[$m]?->reparation ?? 0), 2),
             'pneus'            => round((float)($maintenance[$m]?->pneu ?? 0), 2),
+            'pneumatiques_module' => round((float)($pneumatiques[$m]?->total ?? 0), 2),
+            'nb_operations_pneus' => (int)($pneumatiques[$m]?->nb ?? 0),
             'nb_interventions' => (int)($maintenance[$m]?->nb ?? 0),
             'carburant'        => round((float)($carburant[$m]?->total ?? 0), 2),
             'litres'           => round((float)($carburant[$m]?->litres ?? 0), 2),
             'dotation'         => round((float)($dotations[$m]?->dote ?? 0), 2),
             'total_depenses'   => round(
-                (float)($maintenance[$m]?->total ?? 0) + (float)($carburant[$m]?->total ?? 0),
+                (float)($maintenance[$m]?->total ?? 0)
+                + (float)($carburant[$m]?->total ?? 0)
+                + (float)($pneumatiques[$m]?->total ?? 0),
                 2
             ),
             'nb_signalements'  => (int)($signalements[$m]?->nb ?? 0),
@@ -222,6 +245,7 @@ class StatistiqueService
                 'maintenance'  => round($series->sum('maintenance'), 2),
                 'carburant'    => round($series->sum('carburant'), 2),
                 'pneus'        => round($series->sum('pneus'), 2),
+                'pneumatiques_module' => round($series->sum('pneumatiques_module'), 2),
                 'total'        => round($series->sum('total_depenses'), 2),
                 'nb_interventions' => $series->sum('nb_interventions'),
             ],

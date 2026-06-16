@@ -7,17 +7,20 @@ use App\Models\BonCommande;
 use App\Models\Carburant;
 use App\Models\Chauffeur;
 use App\Models\Checklist;
+use App\Models\Communication;
 use App\Models\DocumentVehicule;
 use App\Models\Maintenance;
 use App\Models\Signalement;
 use App\Models\Vehicule;
 use App\Observers\InvaliderCacheObserver;
 use App\Observers\DocumentVehiculeObserver;
+use App\Observers\AuditScopeObserver;
 use App\Policies\AffectationPolicy;
 use App\Policies\BonCommandePolicy;
 use App\Policies\CarburantPolicy;
 use App\Policies\ChauffeurPolicy;
 use App\Policies\ChecklistPolicy;
+use App\Policies\CommunicationPolicy;
 use App\Policies\DocumentPolicy;
 use App\Policies\MaintenancePolicy;
 use App\Policies\SignalementPolicy;
@@ -40,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
         BonCommande::class     => BonCommandePolicy::class,
         DocumentVehicule::class=> DocumentPolicy::class,
         Carburant::class       => CarburantPolicy::class,
+        Communication::class   => CommunicationPolicy::class,
     ];
 
     public function register(): void
@@ -78,6 +82,10 @@ class AppServiceProvider extends ServiceProvider
 
         // Résolution automatique des alertes document_manquant
         DocumentVehicule::observe(DocumentVehiculeObserver::class);
+
+        // Audit — remplit agence_id/vehicule_id/chauffeur_id/module sur chaque log
+        // pour permettre un filtrage performant par rôle dans AuditLogController
+        \Spatie\Activitylog\Models\Activity::observe(AuditScopeObserver::class);
 
         // HTTPS en production
         if (app()->isProduction()) {

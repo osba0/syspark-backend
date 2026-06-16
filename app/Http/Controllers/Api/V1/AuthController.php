@@ -16,17 +16,19 @@ class AuthController extends Controller
 {
     /**
      * POST /api/v1/auth/login
-     * Connexion et génération du token Sanctum
+     * Connexion par email ou matricule chauffeur
      */
     public function login(Request $request): JsonResponse
     {
         $request->validate([
-            'email'    => ['required', 'email'],
+            'login'    => ['required', 'string', 'max:100'],
             'password' => ['required', 'string'],
         ]);
 
-        // Protection brute-force : 5 tentatives / 1 minute par IP+email
-        $key = 'login:' . $request->ip() . '|' . $request->input('email');
+        $login = trim($request->input('login'));
+
+        // Protection brute-force : 5 tentatives / 1 minute par IP+login
+        $key = 'login:' . $request->ip() . '|' . strtolower($login);
         if (RateLimiter::tooManyAttempts($key, 5)) {
             $seconds = RateLimiter::availableIn($key);
             return response()->json([
@@ -34,15 +36,24 @@ class AuthController extends Controller
             ], 429);
         }
 
-        $user = User::where('email', $request->input('email'))
-            ->with('agence')
-            ->first();
+        // ── Résoudre l'utilisateur ──────────────────────────────
+        // Si contient un @ → connexion par email (tous rôles)
+        // Sinon → connexion par matricule (chauffeurs uniquement)
+        if (str_contains($login, '@')) {
+            $user = User::where('email', $login)->with('agence')->first();
+        } else {
+            // Chercher via la relation Chauffeur → User
+            $user = User::whereHas('chauffeur', function ($q) use ($login) {
+                $q->where('matricule_interne', $login);
+            })->with('agence')->first();
+        }
 
         if (!$user || !Hash::check($request->input('password'), $user->password)) {
             RateLimiter::hit($key, 60);
-            throw ValidationException::withMessages([
-                'email' => ['Identifiants invalides.'],
-            ]);
+            return response()->json([
+                'message' => 'Identifiants invalides.',
+                'errors'  => ['login' => ['Email ou matricule / mot de passe incorrect.']],
+            ], 422);
         }
 
         if (!$user->est_actif) {
@@ -51,20 +62,14 @@ class AuthController extends Controller
             ], 403);
         }
 
-        // Réinitialiser le rate limiter en cas de succès
         RateLimiter::clear($key);
 
-        // Révoquer les anciens tokens si single-session
-        // $user->tokens()->delete();
-
-        // Générer le token Sanctum avec expiration 24h
         $token = $user->createToken(
             'parc-auto-api',
-            ['*'],                     // Abilities (toutes pour l'instant)
-            now()->addHours(24)        // Expiration
+            ['*'],
+            now()->addHours(24)
         )->plainTextToken;
 
-        // Mettre à jour la dernière connexion
         $user->update([
             'last_login_at' => now(),
             'last_login_ip' => $request->ip(),
@@ -73,10 +78,10 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Connexion réussie.',
             'data'    => [
-                'token'       => $token,
-                'token_type'  => 'Bearer',
-                'expires_in'  => 86400, // 24h en secondes
-                'user'        => new UserResource($user),
+                'token'      => $token,
+                'token_type' => 'Bearer',
+                'expires_in' => 86400,
+                'user'       => new UserResource($user),
             ],
         ]);
     }

@@ -7,6 +7,7 @@ use App\Http\Resources\ChecklistResource;
 use App\Models\Checklist;
 use App\Models\Signalement;
 use App\Services\ChecklistService;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,7 +16,10 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class ChecklistController extends BaseApiController
 {
-    public function __construct(private ChecklistService $checklistService) {}
+    public function __construct(
+        private ChecklistService    $checklistService,
+        private NotificationService $notificationService,
+    ) {}
 
     /**
      * GET /api/v1/checklists
@@ -162,6 +166,16 @@ class ChecklistController extends BaseApiController
         }
 
         $checklist->update(['statut' => 'soumis']);
+
+        // Notification aux responsables
+        $checklist->loadMissing(['vehicule', 'chauffeur']);
+        $this->notificationService->checklistSoumise([
+            'id'              => $checklist->id,
+            'immatriculation' => $checklist->vehicule?->immatriculation ?? '—',
+            'chauffeur'       => $checklist->chauffeur?->nom_complet ?? '—',
+            'anomalies'       => count($checklist->non_conformites ?? []),
+            'agence_id'       => $checklist->vehicule?->agence_id,
+        ]);
 
         return $this->success(
             new ChecklistResource($checklist->fresh()),

@@ -7,6 +7,7 @@ use App\Http\Requests\CloturerAffectationRequest;
 use App\Http\Resources\AffectationResource;
 use App\Models\Affectation;
 use App\Models\Vehicule;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +16,9 @@ use Spatie\QueryBuilder\QueryBuilder;
 
 class AffectationController extends BaseApiController
 {
+    public function __construct(
+        private NotificationService $notificationService,
+    ) {}
     /**
      * GET /api/v1/affectations
      */
@@ -128,6 +132,16 @@ class AffectationController extends BaseApiController
             return $this->error('Erreur lors de la création de l\'affectation : ' . $e->getMessage(), 500);
         }
 
+        // Notification
+        $affectation->loadMissing(['vehicule', 'chauffeur']);
+        $chauffeurUserId = $affectation->chauffeur?->user_id;
+        $this->notificationService->affectationCreee([
+            'id'              => $affectation->id,
+            'chauffeur'       => $affectation->chauffeur?->nom_complet ?? '—',
+            'immatriculation' => $affectation->vehicule?->immatriculation ?? '—',
+            'agence_id'       => $affectation->agence_id,
+        ], $chauffeurUserId);
+
         return $this->created(
             new AffectationResource($affectation->load(['vehicule', 'chauffeur', 'axeLivraison'])),
             'Affectation créée avec succès.'
@@ -197,6 +211,18 @@ class AffectationController extends BaseApiController
             DB::rollBack();
             return $this->error('Erreur lors de la clôture : ' . $e->getMessage(), 500);
         }
+
+        // Notification désaffectation
+        $affectation->loadMissing(['vehicule', 'chauffeur']);
+        $chauffeurUserId = $affectation->chauffeur?->user_id;
+        $this->notificationService->affectationCloturee([
+            'id'              => $affectation->id,
+            'chauffeur'       => $affectation->chauffeur?->nom_complet ?? '—',
+            'immatriculation' => $affectation->vehicule?->immatriculation ?? '—',
+            'vehicule_id'     => $affectation->vehicule_id,
+            'kilometrage_fin' => $data['kilometrage_fin'],
+            'agence_id'       => $affectation->agence_id,
+        ], $chauffeurUserId);
 
         return $this->success(
             new AffectationResource($affectation->fresh(['vehicule', 'chauffeur'])),

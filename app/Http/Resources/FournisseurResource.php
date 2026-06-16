@@ -21,6 +21,7 @@ class FournisseurResource extends JsonResource
             'ninea'       => $this->ninea,
             'est_actif'   => $this->est_actif,
             'notes'       => $this->notes,
+            'logo_url'    => $this->getFirstMediaUrl('logo') ?: null,
             'created_at'  => $this->created_at?->toISOString(),
         ];
     }
